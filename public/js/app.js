@@ -121,7 +121,7 @@ function renderLibrary() {
 
   const items = state.items.filter((item) => {
     const searchText = klausurMode
-      ? (item.sheet.aufgabeTitel || '')
+      ? (item.sheet.thema || '')
       : `${item.sheet.topic || ''} ${item.sheet.subtitle || ''} ${item.sheet.infoText || ''}`;
     const matchesQuery = !query || searchText.toLowerCase().includes(query);
     const matchesClass = !schoolClass || item.sheet.schoolClass === schoolClass;
@@ -138,7 +138,7 @@ function renderLibrary() {
     card.className = 'sheet-card';
 
     const title = document.createElement('h3');
-    const rawTitle = (klausurMode ? item.sheet.aufgabeTitel : item.sheet.topic) || '';
+    const rawTitle = (klausurMode ? item.sheet.thema : item.sheet.topic) || '';
     title.textContent = rawTitle.trim() || 'Ohne Titel';
     card.appendChild(title);
 
@@ -152,8 +152,8 @@ function renderLibrary() {
     const badges = document.createElement('div');
     badges.className = 'badges';
     if (klausurMode) {
-      badges.appendChild(badge(`${km.filledTeilaufgaben(item.sheet).length} Teilaufgaben`));
-      badges.appendChild(badge(`${km.punkteSumme(item.sheet)} Punkte`));
+      badges.appendChild(badge(`${km.filledAufgaben(item.sheet).length} Aufgaben`));
+      badges.appendChild(badge(`${km.klausurGesamtpunkte(item.sheet)} Punkte`));
       if (km.hasSolutions(item.sheet)) badges.appendChild(badge('mit Lösungen', 'solutions'));
     } else {
       badges.appendChild(badge(`${wordCount(item.sheet)} Wörter`));
@@ -170,7 +170,7 @@ function renderLibrary() {
       await refreshLibrary();
     }));
     actions.appendChild(action('Löschen', async () => {
-      const label = klausurMode ? item.sheet.aufgabeTitel : item.sheet.topic;
+      const label = klausurMode ? item.sheet.thema : item.sheet.topic;
       if (!confirm(`„${label || 'Ohne Titel'}“ wirklich löschen?`)) return;
       await store.deleteItem(item.id);
       await refreshLibrary();
@@ -590,9 +590,15 @@ function openKlausurEditor(item) {
   state.klausur.subjectLine = state.klausur.subjectLine || state.kind.subject;
   state.kWarnings = [];
 
-  const clamped = Math.min(Math.max(state.klausur.teilaufgaben.length, 2), 5);
-  while (state.klausur.teilaufgaben.length < clamped) state.klausur.teilaufgaben.push(km.emptyTeilaufgabe());
-  state.klausur.teilaufgaben = state.klausur.teilaufgaben.slice(0, clamped);
+  // Immer genau 3 Aufgaben zu je 3 Teilaufgaben – wie besprochen fest,
+  // kein Stepper mehr nötig. Ältere gespeicherte Klausuren mit anderem
+  // Zuschnitt werden beim Öffnen auf dieses Schema gebracht.
+  while (state.klausur.aufgaben.length < 3) state.klausur.aufgaben.push(km.emptyAufgabe());
+  state.klausur.aufgaben = state.klausur.aufgaben.slice(0, 3).map((a) => {
+    const teilaufgaben = [...a.teilaufgaben];
+    while (teilaufgaben.length < 3) teilaufgaben.push(km.emptyTeilaufgabe());
+    return { ...a, teilaufgaben: teilaufgaben.slice(0, 3) };
+  });
   if (!state.klausur.material.length) state.klausur.material.push(km.emptyMaterial());
 
   bindKlausurEditor();
@@ -604,68 +610,111 @@ function bindKlausurEditor() {
   $('k-class').value = k.schoolClass;
   $('k-term').value = k.term;
   $('k-textsize').value = k.textSize;
-  $('k-topic').value = k.aufgabeTitel;
+  $('k-topic').value = k.thema;
 
-  renderKTasks();
+  renderKAufgaben();
   renderKMaterial();
   renderKWarnings();
   updateKDerived();
 }
 
-function renderKTasks() {
+function renderKAufgaben() {
   const list = $('k-task-list');
   list.innerHTML = '';
-  $('k-count').textContent = String(state.klausur.teilaufgaben.length);
 
-  state.klausur.teilaufgaben.forEach((t, index) => {
-    const box = document.createElement('div');
-    box.className = 'task';
+  state.klausur.aufgaben.forEach((aufgabe, aIndex) => {
+    const aNum = aIndex + 1;
+    const group = document.createElement('div');
+    group.className = 'task';
 
-    const number = document.createElement('div');
-    number.className = 'task-number';
-    number.textContent = `Teilaufgabe 1.${index + 1}`;
-    box.appendChild(number);
+    const heading = document.createElement('div');
+    heading.className = 'task-number';
+    heading.textContent = `Aufgabe ${aNum}`;
+    group.appendChild(heading);
 
-    const operatorLabel = document.createElement('label');
-    operatorLabel.className = 'field';
-    operatorLabel.textContent = 'Operator';
-    const select = document.createElement('select');
-    fillSelect(select, [['', 'Noch nicht gewählt'], ...OPERATORS.map((o) => [o.name, `${o.name} · ${o.afb}`])]);
-    select.value = t.operator?.name || '';
-    select.onchange = () => {
-      t.operator = select.value ? OPERATORS.find((o) => o.name === select.value) : null;
-      updateKDerived();
-    };
-    operatorLabel.appendChild(select);
-    box.appendChild(operatorLabel);
-
-    box.appendChild(textareaField('Aufgabentext (nach dem Operator)', t.text, 2, (value) => {
-      t.text = value;
+    group.appendChild(textareaField(`Titel von Aufgabe ${aNum}`, aufgabe.titel, 1, (value) => {
+      aufgabe.titel = value;
       updateKDerived();
     }));
 
-    const pointsLabel = document.createElement('label');
-    pointsLabel.className = 'field';
-    pointsLabel.textContent = 'Punkte';
-    const pointsInput = document.createElement('input');
-    pointsInput.type = 'text';
-    pointsInput.inputMode = 'numeric';
-    pointsInput.value = String(t.punkte);
-    pointsInput.oninput = () => {
-      t.punkte = Number(pointsInput.value.replace(/[^0-9]/g, '')) || 0;
-      updateKDerived();
-    };
-    pointsLabel.appendChild(pointsInput);
-    box.appendChild(pointsLabel);
+    aufgabe.teilaufgaben.forEach((t, tIndex) => {
+      const nummer = `${aNum}.${tIndex + 1}`;
+      const box = document.createElement('div');
+      box.className = 'task';
 
-    const solution = textareaField('Lösung (nur für dich)', t.solution, 2, (value) => {
-      t.solution = value;
-      updateKSolutionButton();
+      const number = document.createElement('div');
+      number.className = 'task-number';
+      number.textContent = `Teilaufgabe ${nummer}`;
+      box.appendChild(number);
+
+      const row = document.createElement('div');
+      row.className = 'grid';
+
+      const operatorLabel = document.createElement('label');
+      operatorLabel.textContent = 'Operator';
+      const select = document.createElement('select');
+      fillSelect(select, [['', 'Noch nicht gewählt'], ...OPERATORS.map((o) => [o.name, `${o.name} · ${o.afb}`])]);
+      select.value = t.operator?.name || '';
+      select.onchange = () => {
+        t.operator = select.value ? OPERATORS.find((o) => o.name === select.value) : null;
+        updateKDerived();
+      };
+      operatorLabel.appendChild(select);
+      row.appendChild(operatorLabel);
+
+      const afbLabel = document.createElement('label');
+      afbLabel.textContent = 'Anforderungsbereich';
+      const afbSelect = document.createElement('select');
+      fillSelect(afbSelect, km.AFB_OPTIONS.map((a) => [a, `AFB ${a}`]));
+      afbSelect.value = t.afb;
+      afbSelect.onchange = () => { t.afb = afbSelect.value; };
+      afbLabel.appendChild(afbSelect);
+      row.appendChild(afbLabel);
+
+      const pointsLabel = document.createElement('label');
+      pointsLabel.textContent = 'Punkte';
+      const pointsInput = document.createElement('input');
+      pointsInput.type = 'text';
+      pointsInput.inputMode = 'numeric';
+      pointsInput.value = String(t.punkte);
+      pointsInput.oninput = () => {
+        t.punkte = Number(pointsInput.value.replace(/[^0-9]/g, '')) || 0;
+        updateKDerived();
+      };
+      pointsLabel.appendChild(pointsInput);
+      row.appendChild(pointsLabel);
+
+      const materialLabel = document.createElement('label');
+      materialLabel.textContent = 'Material (z. B. "1.1")';
+      const materialInput = document.createElement('input');
+      materialInput.type = 'text';
+      materialInput.value = t.material;
+      materialInput.oninput = () => { t.material = materialInput.value; };
+      materialLabel.appendChild(materialInput);
+      row.appendChild(materialLabel);
+
+      box.appendChild(row);
+
+      box.appendChild(textareaField('Aufgabentext (nach dem Operator)', t.text, 2, (value) => {
+        t.text = value;
+        updateKDerived();
+      }));
+
+      const ewh = textareaField(
+        'Erwartungshorizont – ein Punkt je Zeile, Format „Text — Punkte (AFB)"',
+        t.erwartungshorizont, 4, (value) => {
+          t.erwartungshorizont = value;
+          updateKSolutionButton();
+          updateKDerived();
+        }
+      );
+      ewh.classList.add('solution');
+      box.appendChild(ewh);
+
+      group.appendChild(box);
     });
-    solution.classList.add('solution');
-    box.appendChild(solution);
 
-    list.appendChild(box);
+    list.appendChild(group);
   });
   updateKSolutionButton();
 }
@@ -716,11 +765,12 @@ let kDerivedTimer = null;
 function updateKDerived() {
   clearTimeout(kDerivedTimer);
   kDerivedTimer = setTimeout(() => {
-    const summe = km.punkteSumme(state.klausur);
-    $('k-punkte-summe').textContent = `${summe} Punkte insgesamt`;
+    const gesamt = km.klausurGesamtpunkte(state.klausur);
+    const teile = state.klausur.aufgaben.map((a) => km.aufgabeSumme(a)).join(' + ');
+    $('k-punkte-summe').textContent = `${gesamt} Punkte insgesamt (${teile} + ${state.klausur.darstellungspunkte} Darstellungsleistung)`;
     try {
       const pages = pdf.klausurPageCount(state.klausur);
-      $('k-page-estimate').textContent = pages === 1 ? '1 PDF-Seite' : `${pages} PDF-Seiten`;
+      $('k-page-estimate').textContent = pages === 1 ? '1 PDF-Seite (Aufgabenheft)' : `${pages} PDF-Seiten (Aufgabenheft)`;
     } catch (error) {
       console.warn(error);
     }
@@ -731,7 +781,9 @@ function updateKDerived() {
 function kCostEstimate() {
   const system = klausurSystemPrompt(state.kind);
   const inputTokens = Math.max(550, Math.round(system.length / 4));
-  const outputTokens = Math.max(500, state.klausur.teilaufgaben.length * 220);
+  // 3 Aufgaben à 3 Teilaufgaben mit Erwartungshorizont sind deutlich mehr
+  // Text als ein Arbeitsblatt.
+  const outputTokens = 4200;
   const cost = ai.estimatedCost(state.settings, inputTokens, outputTokens);
   const tokens = (inputTokens + outputTokens).toLocaleString('de-DE');
   if (cost === null) return `Geschätzt etwa ${tokens} Tokens; Preis für dieses Modell unbekannt.`;
@@ -753,7 +805,7 @@ function renderKWarnings() {
 }
 
 async function generateKlausur() {
-  const issues = km.validateGenerationInput(state.klausur, state.klausur.teilaufgaben.length);
+  const issues = km.validateGenerationInput(state.klausur);
   if (issues.length) {
     showKError(issues.map((i) => i.message).join('\n'));
     return;
@@ -770,11 +822,11 @@ async function generateKlausur() {
 
   const settings = { ...state.settings, systemPrompt: klausurSystemPrompt(state.kind) };
   const prompt = [
-    `Thema: ${state.klausur.aufgabeTitel}`,
+    `Thema: ${state.klausur.thema}`,
     `Klasse: ${state.klausur.schoolClass}`,
     `Halbjahr: ${state.klausur.term}`,
     `Fach: ${state.kind.subject}`,
-    `Erzeuge genau ${state.klausur.teilaufgaben.length} Teilaufgaben, jede mit Operator, Punktzahl und Musterlösung, gestützt auf passendes Material.`
+    'Erzeuge genau 3 Aufgaben zu je 3 Teilaufgaben mit Operator, AFB, Punktzahl, Erwartungshorizont und passendem Material.'
   ].join('\n');
 
   try {
@@ -799,19 +851,22 @@ function applyKlausurResponse(raw) {
   const object = JSON.parse(raw.slice(start, end + 1));
 
   const k = state.klausur;
-  if (object.aufgabeTitel) k.aufgabeTitel = object.aufgabeTitel;
 
-  const requested = Math.min(Math.max(k.teilaufgaben.length, 2), 5);
-  if (Array.isArray(object.teilaufgaben)) {
-    const teilaufgaben = object.teilaufgaben.map((entry) => ({
-      operator: matchOperator(entry.operator || '') || matchOperator('Erläutern Sie'),
-      text: entry.text || '',
-      punkte: Number(entry.punkte) || 10,
-      solution: entry.solution || '',
-      material: entry.material || ''
-    }));
-    while (teilaufgaben.length < requested) teilaufgaben.push(km.emptyTeilaufgabe());
-    k.teilaufgaben = teilaufgaben.slice(0, requested);
+  if (Array.isArray(object.aufgaben) && object.aufgaben.length) {
+    k.aufgaben = object.aufgaben.slice(0, 3).map((aEntry) => {
+      const rawTeil = Array.isArray(aEntry.teilaufgaben) ? aEntry.teilaufgaben : [];
+      const teilaufgaben = rawTeil.slice(0, 3).map((entry, index) => ({
+        operator: matchOperator(entry.operator || '') || matchOperator(['Benennen Sie', 'Erläutern Sie', 'Bewerten Sie'][index] || 'Erläutern Sie'),
+        text: entry.text || '',
+        punkte: Number(entry.punkte) || 10,
+        afb: km.AFB_OPTIONS.includes(entry.afb) ? entry.afb : ['I', 'II', 'III'][index] || 'II',
+        material: entry.material || '',
+        erwartungshorizont: entry.erwartungshorizont || ''
+      }));
+      while (teilaufgaben.length < 3) teilaufgaben.push(km.emptyTeilaufgabe());
+      return { titel: aEntry.titel || '', teilaufgaben };
+    });
+    while (k.aufgaben.length < 3) k.aufgaben.push(km.emptyAufgabe());
   }
 
   if (Array.isArray(object.material) && object.material.length) {
@@ -1043,20 +1098,8 @@ function wireKlausurEvents() {
   bindKField('k-class', (v) => { state.klausur.schoolClass = v; }, 'change');
   bindKField('k-term', (v) => { state.klausur.term = v; }, 'change');
   bindKField('k-textsize', (v) => { state.klausur.textSize = v; }, 'change');
-  bindKField('k-topic', (v) => { state.klausur.aufgabeTitel = v; });
+  bindKField('k-topic', (v) => { state.klausur.thema = v; });
 
-  $('k-btn-plus').onclick = () => {
-    if (state.klausur.teilaufgaben.length >= 5) return;
-    state.klausur.teilaufgaben.push(km.emptyTeilaufgabe());
-    renderKTasks();
-    updateKDerived();
-  };
-  $('k-btn-minus').onclick = () => {
-    if (state.klausur.teilaufgaben.length <= 2) return;
-    state.klausur.teilaufgaben.pop();
-    renderKTasks();
-    updateKDerived();
-  };
   $('k-btn-material-add').onclick = () => {
     state.klausur.material.push(km.emptyMaterial());
     renderKMaterial();
@@ -1081,7 +1124,7 @@ function wireKlausurEvents() {
   };
 
   $('k-btn-solutions').onclick = () => {
-    download(pdf.buildKlausurSolutionsPDF(state.klausur).output('blob'), `${km.fileName(state.klausur)}_Loesungen.pdf`);
+    download(pdf.buildKlausurSolutionsPDF(state.klausur).output('blob'), `${km.fileName(state.klausur)}_Erwartungshorizont.pdf`);
   };
 }
 

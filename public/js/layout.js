@@ -188,7 +188,10 @@ export function linesHeight(lines) {
 export const Block = {
   // `justify`: Blocksatz – gilt für den Fließtext (Informationstext), nicht
   // für Aufgaben, Kästen oder Beschriftungen, die absichtlich kurz bleiben.
-  text: (runs, opts = {}) => ({ type: 'text', runs, justify: !!opts.justify }),
+  // `align`: 'left' (Default) | 'right' | 'center' – für kurze einzelne
+  // Zeilen wie eine rechtsbündige "Summe"-Angabe; wird ignoriert, wenn
+  // `justify` gesetzt ist.
+  text: (runs, opts = {}) => ({ type: 'text', runs, justify: !!opts.justify, align: opts.align || 'left' }),
   heading: (title, color) => ({ type: 'heading', title, color }),
   callout: (runs, bar, fill) => ({ type: 'callout', runs, bar, fill }),
   image: (image, width, height, align) => ({ type: 'image', image, width, height, align }),
@@ -292,7 +295,7 @@ function splitBlock(block, width, maxHeight, measure) {
   if (block.type === 'text') {
     const parts = splitRuns(block.runs, width, maxHeight);
     return parts
-      ? { head: Block.text(parts.head, { justify: block.justify }), tail: Block.text(parts.tail, { justify: block.justify }) }
+      ? { head: Block.text(parts.head, { justify: block.justify, align: block.align }), tail: Block.text(parts.tail, { justify: block.justify, align: block.align }) }
       : null;
   }
   if (block.type === 'callout') {

@@ -75,24 +75,29 @@ export function systemPromptFor(kind) {
 
 /**
  * Eigenständiger Prompt für Klausuren, angelehnt an die echten
- * WLK-Biologie-Abiturklausuren (Aufgabe → Teilaufgaben mit Punkten,
- * gestützt auf benanntes Material). Kopf-/Fußzeile der Vorlage, die
- * Auswahl "3 von 4 Aufgaben" und der volle Erwartungshorizont mit
- * Einzelpunkten sind bewusst noch nicht Teil davon.
+ * WLK-Biologie-Abiturklausuren: 3 Aufgaben à 30 Punkte, je 3 Teilaufgaben
+ * (AFB I, II, III – auch überschneidend), gestützt auf benanntes Material,
+ * dahinter ein Erwartungshorizont mit Einzelpunkten je Anforderung.
+ * Kopf-/Fußzeile der Vorlage und die Auswahl "3 von 4 Aufgaben" sind
+ * bewusst noch nicht Teil davon.
  */
 export function klausurSystemPrompt(kind) {
-  return `Du erstellst eine Klausuraufgabe für den ${kind.subject}unterricht an einem deutschen Berufskolleg (Höhere Berufsfachschule/Fachoberschule, Leistungskurs-Niveau), im Stil der NRW-Abiturklausuren WLK Biologie-GuS.
+  return `Du erstellst eine vollständige Klausur für den ${kind.subject}unterricht an einem deutschen Berufskolleg (Höhere Berufsfachschule, Leistungskurs-Niveau), exakt im Stil der NRW-Abiturklausuren WLK Biologie-GuS – gleicher Aufbau, gleiche Bezeichnungen, gleiche Formulierungsweise.
 Antworte ausschließlich mit einem JSON-Objekt, kein Wort davor oder danach, kein Markdown, keine Code-Zäune. Genau diese Felder:
-"aufgabeTitel" (String, kurzer Titel der Aufgabe, z. B. "Einfluss des künstlichen Lichtes auf Fledermäuse" – ohne das Wort "Aufgabe" davor, das ergänzt die Vorlage selbst),
-"teilaufgaben" (Array aus 2 bis 5 Objekten mit "operator", "text", "punkte" und "solution"),
-"material" (Array aus 1 bis 5 Objekten mit "titel" und "text").
-Für "operator" ist ausschließlich einer dieser Operatoren erlaubt, wörtlich übernommen: ${OPERATOR_LIST}.
-"text" einer Teilaufgabe ist die Fortsetzung des Satzes nach dem Operator, ohne den Operator selbst, und verweist wo passend auf das zugehörige Material (z. B. "anhand von Material 1.1").
-"punkte" ist eine ganze Zahl; die Punkte aller Teilaufgaben zusammen ergeben etwa 30.
-"solution" ist eine knappe Musterlösung bzw. die zentralen Stichpunkte für genau diese Teilaufgabe – nur für die Lehrkraft.
-"material" enthält den Fachtext, auf den sich die Teilaufgaben stützen – realistisch und eigenständig verfasst (kein Lehrbuchzitat), "titel" im Format "Material 1.1: <Kurztitel>" passend zur referenzierenden Teilaufgabe, "text" mit Absätzen getrennt durch eine Leerzeile, zentrale Fachbegriffe mit **Sternchen** hervorgehoben. Mehrere Teilaufgaben dürfen sich dasselbe oder verschiedene Materialien teilen.
-Gewichte die Anforderungsbereiche nach den KE-Vorgaben: AFB II am stärksten, AFB I stärker als AFB III (AFB II > AFB I > AFB III) – wähle die Operatoren entsprechend, erste Teilaufgabe meist AFB I, letzte meist AFB III.
-Fachlich korrekt, präzise, keine erfundenen Quellen. Sämtliche Aufgaben kurz, verständlich und eindeutig formuliert, ohne Füllwörter oder komplizierte Satzkonstruktionen.`;
+
+"aufgaben" (Array aus genau 3 Objekten, je mit "titel" und "teilaufgaben"):
+  "titel" ist der Aufgabentitel (String, z. B. "Einfluss des künstlichen Lichtes auf Fledermäuse" – ohne das Wort "Aufgabe" davor, das ergänzt die Vorlage). Alle 3 Aufgaben behandeln verschiedene, in sich abgeschlossene Aspekte desselben übergeordneten Themas.
+  "teilaufgaben" ist ein Array aus genau 3 Objekten mit "operator", "text", "punkte", "afb", "material" und "erwartungshorizont".
+    "operator": genau einer dieser Operatoren, wörtlich übernommen: ${OPERATOR_LIST}.
+    "text": Fortsetzung des Satzes nach dem Operator, ohne den Operator selbst, verweist wo passend auf das Material (z. B. "anhand von Material 1.1").
+    "punkte": ganze Zahl; die drei Teilaufgaben einer Aufgabe ergeben zusammen genau 30 Punkte (z. B. 10/13/7 oder 8/14/8).
+    "afb": Anforderungsbereich als String "I", "II", "III" oder überschneidend "I/II" bzw. "II/III". Erste Teilaufgabe meist "I", zweite meist "II", dritte meist "II" oder "III" – insgesamt über alle 3 Aufgaben hinweg gilt AFB II am stärksten gewichtet, AFB I stärker als AFB III (AFB II > AFB I > AFB III), wie in den KE-Vorgaben.
+    "material": welches Material referenziert wird, z. B. "1.1".
+    "erwartungshorizont": String mit den einzelnen erwarteten Antwortpunkten, EINER JE ZEILE, jede Zeile im Format "<knapper Erwartungspunkt> — <Punkte> (<AFB>)", z. B. "Abiotische Faktoren sind alle Faktoren der unbelebten Umwelt, die Einfluss auf ein Ökosystem haben. — 1 (I)". Die Punkte aller Zeilen einer Teilaufgabe ergeben zusammen genau die "punkte" dieser Teilaufgabe. Jede Zeile ist ein einzelner, eigenständig bepunkteter Gedanke – lieber mehr kurze Zeilen als wenige lange.
+
+"material" (Array aus 3 bis 9 Objekten mit "titel" und "text"): der Fachtext, auf den sich die Teilaufgaben stützen – realistisch und eigenständig verfasst (kein Lehrbuchzitat), "titel" im Format "Material 1.1: <Kurztitel>" passend zur referenzierenden Aufgabe.Teilaufgabe-Nummer, "text" mit Absätzen getrennt durch eine Leerzeile, zentrale Fachbegriffe mit **Sternchen** hervorgehoben.
+
+Fachlich korrekt, präzise, keine erfundenen Quellen. Sämtliche Aufgaben und Erwartungspunkte kurz, verständlich und eindeutig formuliert, ohne Füllwörter oder komplizierte Satzkonstruktionen – wie in einer echten Prüfungsaufgabe, nicht wie in einem Lehrbuch.`;
 }
 
 /** Themenvorschläge – bisher nur für Biologie hinterlegt. */

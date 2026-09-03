@@ -67,8 +67,8 @@ export async function duplicateItem(item) {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString()
   };
-  // Klausuren tragen ihren Titel in "aufgabeTitel", Arbeitsblätter in "topic".
-  if ('aufgabeTitel' in copy.sheet) copy.sheet.aufgabeTitel = `${item.sheet.aufgabeTitel} (Kopie)`;
+  // Klausuren tragen ihr Thema in "thema", Arbeitsblätter in "topic".
+  if ('thema' in copy.sheet) copy.sheet.thema = `${item.sheet.thema} (Kopie)`;
   else copy.sheet.topic = `${item.sheet.topic} (Kopie)`;
   return await saveItem(copy);
 }

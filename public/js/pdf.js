@@ -6,7 +6,7 @@ import {
   PAGE, COLORS, BASELINE_FACTOR, blocksFor, solutionBlocksFor, paginate,
   blockHeight, layoutRuns, wrappedTextWidth, tableRowHeights, tableRowIndexWidth
 } from './layout.js';
-import { klausurBlocksFor, klausurSolutionBlocksFor } from './klausur-layout.js';
+import * as klausurLayout from './klausur-layout.js';
 
 const { jsPDF } = window.jspdf;
 
@@ -83,15 +83,20 @@ function render(pages, sheet) {
 // nutzen.
 
 export function klausurPageCount(klausur) {
-  return paginate(klausurBlocksFor(klausur, measure), measure).length;
+  return klausurLayout.klausurPageCount(klausur, measure);
 }
 
+/** Das Aufgabenheft – für die Klasse, ohne Lösungen. */
 export function buildKlausurPDF(klausur) {
-  return renderPlain(paginate(klausurBlocksFor(klausur, measure), measure));
+  const { aufgabenPages } = klausurLayout.klausurAllPages(klausur, measure);
+  return renderPlain(aufgabenPages);
 }
 
+/** Der Erwartungshorizont – eigenes Heft, nur für die Lehrkraft, beginnt
+ *  immer auf einer neuen Seite (wie im echten Original zwei Dokumente). */
 export function buildKlausurSolutionsPDF(klausur) {
-  return renderPlain(paginate(klausurSolutionBlocksFor(klausur, measure), measure));
+  const { ewhPages } = klausurLayout.klausurAllPages(klausur, measure);
+  return renderPlain(ewhPages);
 }
 
 function renderPlain(pages) {
@@ -146,7 +151,7 @@ function drawLines(doc, lines, x, y, align = 'left', width = 0) {
 function drawBlock(doc, block, x, y, width) {
   switch (block.type) {
     case 'text':
-      drawLines(doc, layoutRuns(block.runs, width, measure), x, y, block.justify ? 'justify' : 'left', width);
+      drawLines(doc, layoutRuns(block.runs, width, measure), x, y, block.justify ? 'justify' : (block.align || 'left'), width);
       break;
 
     case 'heading':
