@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive, noimageindex">
+<meta name="theme-color" content="#F1EEE6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171B1F" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Arbeitsblatt">
+<title>Arbeitsblatt</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<script>
+  /* Setzt die gemerkte Hell/Dunkel-Wahl vor dem ersten Aufbau der Seite,
+     damit sie nicht kurz im falschen Thema aufblitzt. */
+  try {
+    var t = localStorage.getItem('ui.theme');
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<script src="vendor/jspdf.umd.min.js" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <img class="brand" src="assets/wordmark.png" alt="RWB">
+    <h1 id="topbar-title">Arbeitsblatt</h1>
+    <div class="topbar-actions">
+      <button type="button" class="icon-button" id="btn-theme" title="Hell/Dunkel umschalten" aria-label="Hell/Dunkel umschalten" aria-pressed="false">🌙</button>
+      <button type="button" class="icon-button" id="btn-context" title="Unterrichts-Kontext" aria-label="Unterrichts-Kontext">🎓</button>
+      <button type="button" class="icon-button" id="btn-settings" title="Einstellungen" aria-label="Einstellungen">⚙️</button>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Bereiche"></nav>
+</header>
+
+<main id="main">
+
+  <!-- Bibliothek -->
+  <section id="view-library" class="view">
+    <div class="library-bar">
+      <input type="search" id="library-search" placeholder="Suchen …" aria-label="Suchen">
+      <select id="library-class" aria-label="Nach Klasse filtern"><option value="">Alle Klassen</option></select>
+      <button type="button" class="primary" id="btn-new">Neu</button>
+    </div>
+    <div id="library-list" class="library-list"></div>
+    <p id="library-empty" class="empty" hidden></p>
+  </section>
+
+  <!-- Editor -->
+  <section id="view-editor" class="view" hidden>
+    <button type="button" class="link-back" id="btn-back">‹ Übersicht</button>
+
+    <details class="card" open>
+      <summary>Kopfdaten</summary>
+      <div class="grid">
+        <label>Klasse
+          <select id="f-class"></select>
+        </label>
+        <label>Halbjahr
+          <select id="f-term">
+            <option>1. Halbjahr 2026/27</option>
+            <option>2. Halbjahr 2026/27</option>
+          </select>
+        </label>
+        <label>Schwierigkeit
+          <select id="f-difficulty">
+            <option>Einfach</option><option selected>Mittel</option><option>Anspruchsvoll</option>
+          </select>
+        </label>
+        <label>Textgröße
+          <select id="f-textsize"></select>
+        </label>
+      </div>
+      <div class="field" id="topic-picker-wrap">
+        <span class="label">Aus dem Lehrplan wählen</span>
+        <div id="topic-picker" class="chips"></div>
+      </div>
+      <label class="field">Eigenes Thema
+        <input type="text" id="f-customtopic" placeholder="Eigenes Thema eintragen …">
+      </label>
+    </details>
+
+    <details class="card" open>
+      <summary>Thema</summary>
+      <label class="field">Überschrift<input type="text" id="f-topic"></label>
+      <label class="field">Unterzeile<input type="text" id="f-subtitle"></label>
+      <label class="field">Leitfrage<textarea id="f-question" rows="2"></textarea></label>
+    </details>
+
+    <details class="card" open>
+      <summary>Aufgaben</summary>
+      <div class="stepper">
+        <span>Anzahl Aufgaben</span>
+        <button type="button" id="btn-task-minus" aria-label="Weniger Aufgaben">−</button>
+        <output id="task-count">3</output>
+        <button type="button" id="btn-task-plus" aria-label="Mehr Aufgaben">+</button>
+      </div>
+      <div id="task-list"></div>
+      <p class="hint">Die KI wählt passende Operatoren selbstständig und baut die Aufgaben über AFB I, II und III auf. Die Lösung erscheint nur auf dem separaten Lösungsblatt, nie auf dem Blatt für die Klasse.</p>
+    </details>
+
+    <details class="card" open>
+      <summary>Seitenlänge, Informationstext &amp; Merksatz</summary>
+      <label class="field">Seitenlänge<select id="f-pages"></select></label>
+      <p class="hint" id="word-target-hint"></p>
+      <label class="field">Informationstext
+        <textarea id="f-info" rows="10" placeholder="Text hier eintippen oder einfügen"></textarea>
+      </label>
+      <p class="hint"><span id="word-count">0 Wörter</span> · Leerzeile trennt Absätze, **Sternchen** machen einen Begriff fett.</p>
+      <label class="field">Merksatz (optional)<textarea id="f-memo" rows="2"></textarea></label>
+    </details>
+
+    <details class="card">
+      <summary>Bild (optional)</summary>
+      <div class="row">
+        <label class="button-like">Bild wählen
+          <input type="file" id="f-imagefile" accept="image/*" hidden>
+        </label>
+        <button type="button" id="btn-imagesearch">Bild im Internet suchen</button>
+      </div>
+      <div id="image-settings" hidden>
+        <img id="image-preview" alt="Vorschau des gewählten Bildes">
+        <label class="field">Bildunterschrift und Quelle<input type="text" id="f-caption"></label>
+        <div class="grid">
+          <label>Anordnung<select id="f-placement"></select></label>
+          <label>Breite <output id="image-width-value">200</output>
+            <input type="range" id="f-imagewidth" min="90" max="380" step="10" value="200">
+          </label>
+        </div>
+        <button type="button" class="danger" id="btn-image-remove">Bild entfernen</button>
+      </div>
+    </details>
+
+    <div class="card generate">
+      <button type="button" class="primary big" id="btn-generate">✨ <span id="generate-label">Arbeitsblatt generieren</span></button>
+      <button type="button" class="danger" id="btn-cancel" hidden>Generierung abbrechen</button>
+      <p class="status" id="page-estimate"></p>
+      <p class="hint" id="cost-estimate"></p>
+      <p class="error" id="error-text" hidden></p>
+      <div id="warnings" hidden>
+        <p class="hint strong">Zum Nachsehen</p>
+        <ul id="warning-list"></ul>
+        <p class="hint">Das Arbeitsblatt ist trotzdem fertig – du kannst alles oben von Hand ändern.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Fußleiste des Editors -->
+<div class="actionbar" id="actionbar" hidden>
+  <button type="button" id="btn-save">Sichern</button>
+  <button type="button" id="btn-preview">Vorschau</button>
+  <button type="button" id="btn-pdf">PDF</button>
+  <button type="button" id="btn-word">Word</button>
+  <button type="button" id="btn-solutions" hidden>Lösungsblatt</button>
+</div>
+
+<!-- Dialoge -->
+<dialog id="dlg-settings">
+  <form method="dialog" class="dialog-body">
+    <h2>KI-Einstellungen</h2>
+    <label class="field">Anbieter<select id="s-provider"></select></label>
+    <label class="field">Modell<select id="s-model"></select></label>
+    <p class="hint" id="s-model-hint"></p>
+    <label class="field">Gründlichkeit<select id="s-effort"></select></label>
+    <label class="field"><span id="s-key-hint">Zugangsschlüssel</span>
+      <input type="password" id="s-key" autocomplete="off" spellcheck="false" placeholder="sk-…">
+    </label>
+    <p class="hint">Der Schlüssel liegt nur in diesem Browser (lokaler Speicher) und geht direkt an den Dienst. Auf einem geteilten Rechner besser nach der Arbeit wieder löschen.</p>
+    <menu><button value="ok" class="primary">Fertig</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-context">
+  <form method="dialog" class="dialog-body">
+    <h2>Unterrichts-Kontext</h2>
+    <p class="hint">Einmal einstellen – gilt für alle Blätter.</p>
+    <div class="grid">
+      <label>Fach<input type="text" id="c-subject"></label>
+      <label>Klassenstufe<input type="text" id="c-grade"></label>
+      <label>Schulform<select id="c-schooltype"></select></label>
+      <label>Sprachniveau<select id="c-level"></select></label>
+    </div>
+    <fieldset>
+      <legend>Aufgabentypen</legend>
+      <div id="c-tasktypes" class="chips"></div>
+    </fieldset>
+    <label class="field">Notizen<textarea id="c-notes" rows="3"></textarea></label>
+    <menu><button value="ok" class="primary">Fertig</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-image">
+  <div class="dialog-body">
+    <h2>Bild suchen</h2>
+    <div class="row">
+      <input type="search" id="i-query" placeholder="Suchbegriff">
+      <select id="i-source"></select>
+      <button type="button" class="primary" id="i-search">Suchen</button>
+    </div>
+    <p class="hint" id="i-status"></p>
+    <div id="i-results" class="image-results"></div>
+    <menu><button type="button" id="i-close">Schließen</button></menu>
+  </div>
+</dialog>
+
+<dialog id="dlg-preview" class="wide">
+  <div class="dialog-body">
+    <h2>PDF-Vorschau</h2>
+    <iframe id="preview-frame" title="PDF-Vorschau"></iframe>
+    <menu><button type="button" id="preview-close" class="primary">Fertig</button></menu>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
