@@ -100,7 +100,9 @@ export function materialParagraphs(text) {
 }
 
 export function hasSolutions(klausur) {
-  return klausur.aufgaben.some((a) => filledTeilaufgaben(a).some((t) => t.erwartungshorizont.trim()));
+  // Über filledAufgaben statt klausur.aufgaben direkt – die fängt fehlende
+  // oder aus einer älteren Fassung stammende Daten bereits ab.
+  return filledAufgaben(klausur).some((a) => filledTeilaufgaben(a).some((t) => t.erwartungshorizont.trim()));
 }
 
 export function fileName(klausur) {
