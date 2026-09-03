@@ -194,11 +194,53 @@ export const Block = {
   image: (image, width, height, align) => ({ type: 'image', image, width, height, align }),
   wrappedImageText: (image, imageWidth, imageHeight, align, runs, opts = {}) =>
     ({ type: 'wrappedImageText', image, imageWidth, imageHeight, align, runs, justify: !!opts.justify }),
+  // Nummerierter Absatz mit hängendem Einzug: die Nummer steht links in
+  // einer festen Spalte, der Text wird daneben umgebrochen und bleibt auch
+  // in Folgezeilen unter dem Text stehen – nicht unter der Nummer.
+  indexedText: (indexRuns, bodyRuns, indent, opts = {}) =>
+    ({ type: 'indexedText', indexRuns, bodyRuns, indent, justify: !!opts.justify }),
   spacer: (h) => ({ type: 'spacer', height: h })
 };
 
 export function wrappedTextWidth(totalWidth, imageWidth) {
   return Math.max(1, totalWidth - imageWidth - IMAGE_TEXT_GAP);
+}
+
+const TABLE_ROW_PADDING = 16;
+const TABLE_MIN_ROW_HEIGHT = 28;
+const TABLE_HEADER_HEIGHT = 26;
+
+/** Ein einfacher Zwei-Spalten-Tisch – bislang nur für die Klausur-Tabelle
+ *  "Aufgabenstellung / Punkte" gebraucht, deshalb bewusst schlicht. Jede
+ *  Zeile trägt optional eine Nummer (`indexRuns`, z. B. "1.1") in einer
+ *  eigenen kleinen Spalte links im Zelltext – hängender Einzug wie bei
+ *  `indexedText`, damit eine umbrechende Aufgabenstellung unter dem Text
+ *  bleibt statt unter der Nummer. */
+export function tableBlock(header, rows, colWidths) {
+  return { type: 'table', header, rows, colWidths };
+}
+
+/** Breite der Nummern-Spalte einer Tabellenzeile – von Höhenberechnung
+ *  und Zeichnung gemeinsam genutzt, damit beide nie auseinanderlaufen. */
+export function tableRowIndexWidth(row, measure) {
+  if (!row.indexRuns || !row.indexRuns.length) return 0;
+  const lines = layoutRuns(row.indexRuns, 999, measure);
+  return Math.ceil(Math.max(...lines.map((l) => l.width))) + 6;
+}
+
+export function tableRowHeights(block, measure) {
+  const rowHeights = block.rows.map((row) => {
+    const indexWidth = tableRowIndexWidth(row, measure);
+    const bodyWidth = block.colWidths[0] - TABLE_ROW_PADDING - indexWidth;
+    const lines = layoutRuns(row.runs, bodyWidth, measure);
+    return Math.max(TABLE_MIN_ROW_HEIGHT, Math.ceil(linesHeight(lines)) + TABLE_ROW_PADDING);
+  });
+  return { headerHeight: TABLE_HEADER_HEIGHT, rowHeights };
+}
+
+function tableHeight(block, measure) {
+  const { headerHeight, rowHeights } = tableRowHeights(block, measure);
+  return headerHeight + rowHeights.reduce((sum, h) => sum + h, 0);
 }
 
 export function blockHeight(block, width, measure) {
@@ -216,6 +258,12 @@ export function blockHeight(block, width, measure) {
         layoutRuns(block.runs, wrappedTextWidth(width, block.imageWidth), measure)
       ));
       return Math.max(block.imageHeight, textHeight);
+    }
+    case 'table':
+      return tableHeight(block, measure);
+    case 'indexedText': {
+      const bodyWidth = Math.max(1, width - block.indent);
+      return Math.ceil(linesHeight(layoutRuns(block.bodyRuns, bodyWidth, measure)));
     }
     case 'spacer':
       return block.height;
@@ -253,6 +301,17 @@ function splitBlock(block, width, maxHeight, measure) {
     return parts
       ? { head: Block.callout(parts.head, block.bar, block.fill), tail: Block.callout(parts.tail, block.bar, block.fill) }
       : null;
+  }
+  if (block.type === 'indexedText') {
+    const bodyWidth = Math.max(1, width - block.indent);
+    const parts = splitRuns(block.bodyRuns, bodyWidth, maxHeight);
+    if (!parts) return null;
+    // Die Nummer erscheint nur einmal, am Anfang – die Fortsetzung nach dem
+    // Seitenumbruch bleibt trotzdem im Textbund eingerückt.
+    return {
+      head: Block.indexedText(block.indexRuns, parts.head, block.indent, { justify: block.justify }),
+      tail: Block.indexedText([], parts.tail, block.indent, { justify: block.justify })
+    };
   }
   return null;
 }
@@ -356,14 +415,18 @@ export function blocksFor(sheet, measure) {
   const tasks = filledTasks(sheet);
   if (tasks.length) {
     blocks.push(Block.heading('Aufgaben', COLORS.rot));
+    // Hängender Einzug: die Nummer steht in einer festen linken Spalte,
+    // eine umgebrochene Aufgabe bleibt in Folgezeilen unter dem Text stehen
+    // statt unter der Nummer.
+    const indexIndent = Math.ceil(measure(String(tasks.length), { size: bodySize, bold: true })) + 14;
     tasks.forEach((task, index) => {
-      const runs = [
-        ...plainRun(`${index + 1}   `, bodySize, { bold: true, color: COLORS.rot }),
+      const indexRuns = plainRun(`${index + 1}`, bodySize, { bold: true, color: COLORS.rot });
+      const bodyRuns = [
         ...plainRun(`${task.operator.name}${operatorSuffix(task)}`, bodySize, { bold: true }),
         ...boldRuns(taskContinuation(task), bodySize),
         ...plainRun(`   (${task.operator.afb})`, 10, { italic: true, color: '#8A8A8A' })
       ];
-      blocks.push(Block.text(runs));
+      blocks.push(Block.indexedText(indexRuns, bodyRuns, indexIndent));
       blocks.push(Block.spacer(5));
     });
     blocks.push(Block.spacer(6));
@@ -446,7 +509,7 @@ function combinedInformationText(paragraphs, size) {
 }
 
 /** Das separate Lösungsblatt – nur für die Lehrkraft. */
-export function solutionBlocksFor(sheet) {
+export function solutionBlocksFor(sheet, measure) {
   const blocks = [];
   const bodySize = TEXT_SIZES[sheet.textSize].pdfBodySize;
 
@@ -470,13 +533,14 @@ export function solutionBlocksFor(sheet) {
     return blocks;
   }
 
+  const indexIndent = Math.ceil(measure(String(sheet.tasks.length), { size: bodySize, bold: true })) + 14;
   for (const { task, index } of withSolutions) {
-    const runs = [
-      ...plainRun(`${index + 1}   `, bodySize, { bold: true, color: COLORS.rot }),
+    const indexRuns = plainRun(`${index + 1}`, bodySize, { bold: true, color: COLORS.rot });
+    const bodyRuns = [
       ...plainRun(`${task.operator.name}${operatorSuffix(task)}`, bodySize, { bold: true }),
       ...boldRuns(taskContinuation(task), bodySize)
     ];
-    blocks.push(Block.text(runs));
+    blocks.push(Block.indexedText(indexRuns, bodyRuns, indexIndent));
     blocks.push(Block.spacer(4));
     blocks.push(Block.text(boldRuns(task.solution, bodySize, { color: '#1B6B3A' })));
     blocks.push(Block.spacer(12));

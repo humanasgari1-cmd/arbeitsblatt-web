@@ -4,7 +4,7 @@
 
 import {
   PAGE, COLORS, BASELINE_FACTOR, blocksFor, solutionBlocksFor, paginate,
-  blockHeight, layoutRuns, wrappedTextWidth
+  blockHeight, layoutRuns, wrappedTextWidth, tableRowHeights, tableRowIndexWidth
 } from './layout.js';
 
 const { jsPDF } = window.jspdf;
@@ -57,7 +57,7 @@ export function buildPDF(sheet) {
 }
 
 export function buildSolutionsPDF(sheet) {
-  return render(paginate(solutionBlocksFor(sheet), measure), sheet);
+  return render(paginate(solutionBlocksFor(sheet, measure), measure), sheet);
 }
 
 function render(pages, sheet) {
@@ -151,10 +151,67 @@ function drawBlock(doc, block, x, y, width) {
       break;
     }
 
+    case 'indexedText': {
+      // Nummer in der linken Spalte, Text daneben – bleibt auch in
+      // Folgezeilen unter dem Text stehen, nie unter der Nummer.
+      const bodyWidth = Math.max(1, width - block.indent);
+      if (block.indexRuns && block.indexRuns.length) {
+        drawLines(doc, layoutRuns(block.indexRuns, block.indent, measure), x, y, 'left', block.indent);
+      }
+      drawLines(doc, layoutRuns(block.bodyRuns, bodyWidth, measure), x + block.indent, y,
+        block.justify ? 'justify' : 'left', bodyWidth);
+      break;
+    }
+
+    case 'table':
+      drawTable(doc, block, x, y, width);
+      break;
+
     case 'spacer':
     default:
       break;
   }
+}
+
+function drawTable(doc, block, x, y, width) {
+  const { headerHeight, rowHeights } = tableRowHeights(block, measure);
+  const [col1Width, col2Width] = block.colWidths;
+
+  doc.setDrawColor('#000000');
+  doc.setLineWidth(0.8);
+
+  doc.rect(x, y, width, headerHeight);
+  doc.line(x + col1Width, y, x + col1Width, y + headerHeight);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(COLORS.schwarz);
+  doc.text(block.header[0], x + 8, y + headerHeight / 2 + 3.5);
+  const col2Label = block.header[1];
+  const col2LabelWidth = doc.getTextWidth(col2Label);
+  doc.text(col2Label, x + col1Width + (col2Width - col2LabelWidth) / 2, y + headerHeight / 2 + 3.5);
+
+  let rowY = y + headerHeight;
+  block.rows.forEach((row, index) => {
+    const rowHeight = rowHeights[index];
+    doc.rect(x, rowY, width, rowHeight);
+    doc.line(x + col1Width, rowY, x + col1Width, rowY + rowHeight);
+
+    const indexWidth = tableRowIndexWidth(row, measure);
+    if (indexWidth) {
+      drawLines(doc, layoutRuns(row.indexRuns, indexWidth, measure), x + 8, rowY + 8, 'left', indexWidth);
+    }
+    const textWidth = col1Width - 16 - indexWidth;
+    drawLines(doc, layoutRuns(row.runs, textWidth, measure), x + 8 + indexWidth, rowY + 8, 'left', textWidth);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(COLORS.schwarz);
+    const ptText = String(row.points);
+    const ptWidth = doc.getTextWidth(ptText);
+    doc.text(ptText, x + col1Width + (col2Width - ptWidth) / 2, rowY + rowHeight / 2 + 4);
+
+    rowY += rowHeight;
+  });
 }
 
 function addImage(doc, image, x, y, width, height) {
