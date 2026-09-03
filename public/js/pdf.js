@@ -6,6 +6,7 @@ import {
   PAGE, COLORS, BASELINE_FACTOR, blocksFor, solutionBlocksFor, paginate,
   blockHeight, layoutRuns, wrappedTextWidth, tableRowHeights, tableRowIndexWidth
 } from './layout.js';
+import { klausurBlocksFor, klausurSolutionBlocksFor } from './klausur-layout.js';
 
 const { jsPDF } = window.jspdf;
 
@@ -66,6 +67,37 @@ function render(pages, sheet) {
     if (index > 0) doc.addPage([PAGE.width, PAGE.height]);
     drawHeader(doc, sheet);
     drawFooter(doc, sheet, index + 1, pages.length);
+    let cursorY = PAGE.contentTop;
+    for (const block of blocks) {
+      drawBlock(doc, block, PAGE.sideMargin, cursorY, PAGE.contentWidth);
+      cursorY += blockHeight(block, PAGE.contentWidth, measure);
+    }
+  });
+  return doc;
+}
+
+// MARK: - Klausuren
+//
+// Eigener, schlichterer Render-Pfad: keine Kopf-/Fußzeile (siehe
+// klausur-layout.js) – rührt sonst nichts an dem an, was Arbeitsblätter
+// nutzen.
+
+export function klausurPageCount(klausur) {
+  return paginate(klausurBlocksFor(klausur, measure), measure).length;
+}
+
+export function buildKlausurPDF(klausur) {
+  return renderPlain(paginate(klausurBlocksFor(klausur, measure), measure));
+}
+
+export function buildKlausurSolutionsPDF(klausur) {
+  return renderPlain(paginate(klausurSolutionBlocksFor(klausur, measure), measure));
+}
+
+function renderPlain(pages) {
+  const doc = newDoc();
+  pages.forEach((blocks, index) => {
+    if (index > 0) doc.addPage([PAGE.width, PAGE.height]);
     let cursorY = PAGE.contentTop;
     for (const block of blocks) {
       drawBlock(doc, block, PAGE.sideMargin, cursorY, PAGE.contentWidth);

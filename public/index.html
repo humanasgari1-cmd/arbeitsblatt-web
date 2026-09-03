@@ -151,7 +151,74 @@
       </div>
     </div>
   </section>
+
+  <!-- Klausur-Editor – eigener Aufbau (Tabelle mit Punkten, Material),
+       nur bei "Klausuren Bio" sichtbar. Rührt an nichts, was die
+       Arbeitsblatt-Reiter oben nutzen. -->
+  <section id="view-editor-klausur" class="view" hidden>
+    <button type="button" class="link-back" id="btn-back-k">‹ Übersicht</button>
+
+    <details class="card" open>
+      <summary>Kopfdaten</summary>
+      <div class="grid">
+        <label>Klasse
+          <select id="k-class"></select>
+        </label>
+        <label>Halbjahr
+          <select id="k-term">
+            <option>1. Halbjahr 2026/27</option>
+            <option>2. Halbjahr 2026/27</option>
+          </select>
+        </label>
+        <label>Textgröße
+          <select id="k-textsize"></select>
+        </label>
+      </div>
+      <label class="field">Aufgabentitel
+        <input type="text" id="k-topic" placeholder="z. B. Einfluss des künstlichen Lichtes auf Fledermäuse">
+      </label>
+    </details>
+
+    <details class="card" open>
+      <summary>Teilaufgaben</summary>
+      <div class="stepper">
+        <span>Anzahl Teilaufgaben</span>
+        <button type="button" id="k-btn-minus" aria-label="Weniger Teilaufgaben">−</button>
+        <output id="k-count">3</output>
+        <button type="button" id="k-btn-plus" aria-label="Mehr Teilaufgaben">+</button>
+      </div>
+      <div id="k-task-list"></div>
+      <p class="hint" id="k-punkte-summe"></p>
+      <p class="hint">Die KI wählt passende Operatoren selbstständig und gewichtet nach AFB II &gt; AFB I &gt; AFB III. Die Lösung erscheint nur auf dem separaten Lösungsblatt.</p>
+    </details>
+
+    <details class="card" open>
+      <summary>Material</summary>
+      <div id="k-material-list"></div>
+      <button type="button" id="k-btn-material-add">+ Material hinzufügen</button>
+    </details>
+
+    <div class="card generate">
+      <button type="button" class="primary big" id="k-btn-generate">✨ Klausur generieren</button>
+      <button type="button" class="danger" id="k-btn-cancel" hidden>Generierung abbrechen</button>
+      <p class="status" id="k-page-estimate"></p>
+      <p class="hint" id="k-cost-estimate"></p>
+      <p class="error" id="k-error-text" hidden></p>
+      <div id="k-warnings" hidden>
+        <p class="hint strong">Zum Nachsehen</p>
+        <ul id="k-warning-list"></ul>
+        <p class="hint">Die Klausur ist trotzdem fertig – du kannst alles oben von Hand ändern.</p>
+      </div>
+    </div>
+  </section>
 </main>
+
+<div class="actionbar" id="actionbar-k" hidden>
+  <button type="button" id="k-btn-save">Sichern</button>
+  <button type="button" id="k-btn-preview">Vorschau</button>
+  <button type="button" id="k-btn-pdf">PDF</button>
+  <button type="button" id="k-btn-solutions" hidden>Lösungsblatt</button>
+</div>
 
 <!-- Fußleiste des Editors -->
 <div class="actionbar" id="actionbar" hidden>

@@ -24,10 +24,6 @@ Fachlich korrekt, altersgerecht, keine erfundenen Quellen. Kein Lückentext. Die
 
 const PROGRESSION_SHEET = `Steigere die Aufgaben im Anforderungsniveau: erst Reproduktion (AFB I), dann Anwendung (AFB II), dann Bewertung/Transfer (AFB III) – wähle die Operatoren entsprechend aus der erlaubten Liste.`;
 
-// Vorläufig: Gewichtung nach den KE-Vorgaben. Der genaue Klausuraufbau
-// wird noch besprochen.
-const PROGRESSION_EXAM = `Es ist eine Klausur, kein Übungsblatt: die Aufgaben sind bewertbar formuliert, jede mit eigener Musterlösung. Gewichte die Anforderungsbereiche nach den KE-Vorgaben (AFB II vor AFB I vor AFB III) und vergib am Ende jeder Aufgabe keine Punktzahlen im Text – die trägt die Lehrkraft selbst ein.`;
-
 export const KINDS = [
   {
     id: 'bio',
@@ -59,7 +55,9 @@ export const KINDS = [
     subject: 'Biologie',
     docLabel: 'Klausur',
     useCurriculum: true,
-    extra: PROGRESSION_EXAM
+    // Eigener Aufbau (Tabelle, Material, Punkte) statt der Arbeitsblatt-Form
+    // – deshalb ein eigenes Layout und ein eigener Prompt, siehe unten.
+    layout: 'klausur'
   }
 ];
 
@@ -67,8 +65,34 @@ export function kindById(id) {
   return KINDS.find((k) => k.id === id) || KINDS[0];
 }
 
+export function isKlausur(kind) {
+  return kind.layout === 'klausur';
+}
+
 export function systemPromptFor(kind) {
   return `${baseInstructions(kind.subject, kind.docLabel)}\n${kind.extra}`;
+}
+
+/**
+ * Eigenständiger Prompt für Klausuren, angelehnt an die echten
+ * WLK-Biologie-Abiturklausuren (Aufgabe → Teilaufgaben mit Punkten,
+ * gestützt auf benanntes Material). Kopf-/Fußzeile der Vorlage, die
+ * Auswahl "3 von 4 Aufgaben" und der volle Erwartungshorizont mit
+ * Einzelpunkten sind bewusst noch nicht Teil davon.
+ */
+export function klausurSystemPrompt(kind) {
+  return `Du erstellst eine Klausuraufgabe für den ${kind.subject}unterricht an einem deutschen Berufskolleg (Höhere Berufsfachschule/Fachoberschule, Leistungskurs-Niveau), im Stil der NRW-Abiturklausuren WLK Biologie-GuS.
+Antworte ausschließlich mit einem JSON-Objekt, kein Wort davor oder danach, kein Markdown, keine Code-Zäune. Genau diese Felder:
+"aufgabeTitel" (String, kurzer Titel der Aufgabe, z. B. "Einfluss des künstlichen Lichtes auf Fledermäuse" – ohne das Wort "Aufgabe" davor, das ergänzt die Vorlage selbst),
+"teilaufgaben" (Array aus 2 bis 5 Objekten mit "operator", "text", "punkte" und "solution"),
+"material" (Array aus 1 bis 5 Objekten mit "titel" und "text").
+Für "operator" ist ausschließlich einer dieser Operatoren erlaubt, wörtlich übernommen: ${OPERATOR_LIST}.
+"text" einer Teilaufgabe ist die Fortsetzung des Satzes nach dem Operator, ohne den Operator selbst, und verweist wo passend auf das zugehörige Material (z. B. "anhand von Material 1.1").
+"punkte" ist eine ganze Zahl; die Punkte aller Teilaufgaben zusammen ergeben etwa 30.
+"solution" ist eine knappe Musterlösung bzw. die zentralen Stichpunkte für genau diese Teilaufgabe – nur für die Lehrkraft.
+"material" enthält den Fachtext, auf den sich die Teilaufgaben stützen – realistisch und eigenständig verfasst (kein Lehrbuchzitat), "titel" im Format "Material 1.1: <Kurztitel>" passend zur referenzierenden Teilaufgabe, "text" mit Absätzen getrennt durch eine Leerzeile, zentrale Fachbegriffe mit **Sternchen** hervorgehoben. Mehrere Teilaufgaben dürfen sich dasselbe oder verschiedene Materialien teilen.
+Gewichte die Anforderungsbereiche nach den KE-Vorgaben: AFB II am stärksten, AFB I stärker als AFB III (AFB II > AFB I > AFB III) – wähle die Operatoren entsprechend, erste Teilaufgabe meist AFB I, letzte meist AFB III.
+Fachlich korrekt, präzise, keine erfundenen Quellen. Sämtliche Aufgaben kurz, verständlich und eindeutig formuliert, ohne Füllwörter oder komplizierte Satzkonstruktionen.`;
 }
 
 /** Themenvorschläge – bisher nur für Biologie hinterlegt. */
