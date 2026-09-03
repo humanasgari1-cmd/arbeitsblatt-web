@@ -79,12 +79,26 @@ function render(pages, sheet) {
 
 function drawLines(doc, lines, x, y, align = 'left', width = 0) {
   let cursorY = y;
-  for (const line of lines) {
+  lines.forEach((line, index) => {
+    // Blocksatz: letzte Zeile eines Absatzes bleibt flatterhaft, wie beim
+    // Drucksatz üblich – nur zwischen echten Wortzwischenräumen wird
+    // gestreckt, nie innerhalb eines Wortes.
+    const isLastLine = index === lines.length - 1;
+    const justify = align === 'justify' && !isLastLine;
+    const spaceCount = justify ? line.pieces.filter((p) => p.kind === 'space').length : 0;
+    const extra = justify && spaceCount > 0 ? Math.max(0, width - line.width) / spaceCount : 0;
+
     let cursorX = x;
-    if (align === 'right') cursorX = x + width - line.width;
-    else if (align === 'center') cursorX = x + (width - line.width) / 2;
+    if (!justify) {
+      if (align === 'right') cursorX = x + width - line.width;
+      else if (align === 'center') cursorX = x + (width - line.width) / 2;
+    }
     const baseline = cursorY + (line.size || 12) * BASELINE_FACTOR;
     for (const piece of line.pieces) {
+      if (piece.kind === 'space') {
+        cursorX += piece.w + extra;
+        continue;
+      }
       if (piece.text.trim()) {
         doc.setFont('helvetica', fontStyle(piece));
         doc.setFontSize(piece.size);
@@ -94,13 +108,13 @@ function drawLines(doc, lines, x, y, align = 'left', width = 0) {
       cursorX += piece.w;
     }
     cursorY += line.height;
-  }
+  });
 }
 
 function drawBlock(doc, block, x, y, width) {
   switch (block.type) {
     case 'text':
-      drawLines(doc, layoutRuns(block.runs, width, measure), x, y);
+      drawLines(doc, layoutRuns(block.runs, width, measure), x, y, block.justify ? 'justify' : 'left', width);
       break;
 
     case 'heading':
@@ -132,7 +146,8 @@ function drawBlock(doc, block, x, y, width) {
       const imageX = block.align === 'left' ? x : x + width - block.imageWidth;
       addImage(doc, block.image, imageX, y, block.imageWidth, block.imageHeight);
       const textX = block.align === 'left' ? x + block.imageWidth + 12 : x;
-      drawLines(doc, layoutRuns(block.runs, wrappedTextWidth(width, block.imageWidth), measure), textX, y);
+      const textWidth = wrappedTextWidth(width, block.imageWidth);
+      drawLines(doc, layoutRuns(block.runs, textWidth, measure), textX, y, block.justify ? 'justify' : 'left', textWidth);
       break;
     }
 

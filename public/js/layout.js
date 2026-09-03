@@ -39,6 +39,27 @@ const CALLOUT_INSET = 22;
 // MARK: - Textläufe
 
 /**
+ * jsPDFs Basisschriften kennen nur WinAnsi – ein "richtiges" Minuszeichen
+ * (U+2212), wie es KI-Antworten gern statt des Bindestrichs setzen, hat dort
+ * keine Glyphe. Ohne Ersatz wird es beim Messen als 0pt breit gezählt und
+ * überlagert dann die Zahl dahinter (z. B. „−70 mV" wurde zu einem
+ * verschmierten „70mV"). Deshalb vor jedem Textlauf auf sichere Zeichen
+ * abbilden.
+ */
+const PDF_CHAR_FIXES = [
+  [/[‐‑‒−]/g, '-'],   // Bindestrich-Varianten und echtes Minus -> Hyphen
+  [/′/g, "'"],                       // Prime -> Apostroph
+  [/″/g, '"'],                       // Doppel-Prime -> Anfuehrungszeichen
+  [/ /g, ' ']                       // geschuetztes Leerzeichen -> normales Leerzeichen
+];
+
+function sanitizeForPdf(text) {
+  let out = String(text ?? '');
+  for (const [pattern, replacement] of PDF_CHAR_FIXES) out = out.replace(pattern, replacement);
+  return out;
+}
+
+/**
  * Zerlegt Text an `**…**` in fette und normale Läufe – die Sternchen
  * selbst landen nie im Ergebnis, egal in welchem Feld die KI sie gesetzt hat.
  */
@@ -47,7 +68,7 @@ export function boldRuns(text, size, base = {}) {
   const push = (t, bold) => {
     if (t) runs.push({ text: t, size, bold, italic: !!base.italic, color: base.color || COLORS.schwarz, kern: base.kern || 0 });
   };
-  let rest = String(text ?? '');
+  let rest = sanitizeForPdf(text);
   while (true) {
     const start = rest.indexOf('**');
     if (start < 0) break;
@@ -67,7 +88,7 @@ export function boldRuns(text, size, base = {}) {
 
 export function plainRun(text, size, opts = {}) {
   return [{
-    text: String(text ?? ''), size,
+    text: sanitizeForPdf(text), size,
     bold: !!opts.bold, italic: !!opts.italic,
     color: opts.color || COLORS.schwarz, kern: opts.kern || 0
   }];
@@ -165,12 +186,14 @@ export function linesHeight(lines) {
 // MARK: - Bausteine
 
 export const Block = {
-  text: (runs) => ({ type: 'text', runs }),
+  // `justify`: Blocksatz – gilt für den Fließtext (Informationstext), nicht
+  // für Aufgaben, Kästen oder Beschriftungen, die absichtlich kurz bleiben.
+  text: (runs, opts = {}) => ({ type: 'text', runs, justify: !!opts.justify }),
   heading: (title, color) => ({ type: 'heading', title, color }),
   callout: (runs, bar, fill) => ({ type: 'callout', runs, bar, fill }),
   image: (image, width, height, align) => ({ type: 'image', image, width, height, align }),
-  wrappedImageText: (image, imageWidth, imageHeight, align, runs) =>
-    ({ type: 'wrappedImageText', image, imageWidth, imageHeight, align, runs }),
+  wrappedImageText: (image, imageWidth, imageHeight, align, runs, opts = {}) =>
+    ({ type: 'wrappedImageText', image, imageWidth, imageHeight, align, runs, justify: !!opts.justify }),
   spacer: (h) => ({ type: 'spacer', height: h })
 };
 
@@ -220,7 +243,9 @@ function splitBlock(block, width, maxHeight, measure) {
 
   if (block.type === 'text') {
     const parts = splitRuns(block.runs, width, maxHeight);
-    return parts ? { head: Block.text(parts.head), tail: Block.text(parts.tail) } : null;
+    return parts
+      ? { head: Block.text(parts.head, { justify: block.justify }), tail: Block.text(parts.tail, { justify: block.justify }) }
+      : null;
   }
   if (block.type === 'callout') {
     if (maxHeight <= CALLOUT_INSET + 1) return null;
@@ -373,18 +398,18 @@ export function blocksFor(sheet, measure) {
         taken++;
       }
       if (taken > 0 && taken < lines.length) {
-        blocks.push(Block.wrappedImageText(image, sideWidth, sideHeight, align, runsFromLines(lines.slice(0, taken))));
-        blocks.push(Block.text(runsFromLines(lines.slice(taken))));
+        blocks.push(Block.wrappedImageText(image, sideWidth, sideHeight, align, runsFromLines(lines.slice(0, taken)), { justify: true }));
+        blocks.push(Block.text(runsFromLines(lines.slice(taken)), { justify: true }));
         blocks.push(Block.spacer(5));
       } else {
         blocks.push(Block.image(image, sideWidth, sideHeight, align));
-        blocks.push(Block.text(allText));
+        blocks.push(Block.text(allText, { justify: true }));
         blocks.push(Block.spacer(5));
       }
     } else {
       blocks.push(Block.image(image, fitWidth, height, align));
       for (const paragraph of paragraphs) {
-        blocks.push(Block.text(boldRuns(paragraph, bodySize)));
+        blocks.push(Block.text(boldRuns(paragraph, bodySize), { justify: true }));
         blocks.push(Block.spacer(5));
       }
     }
@@ -394,7 +419,7 @@ export function blocksFor(sheet, measure) {
     blocks.push(Block.spacer(6));
   } else {
     for (const paragraph of paragraphs) {
-      blocks.push(Block.text(boldRuns(paragraph, bodySize)));
+      blocks.push(Block.text(boldRuns(paragraph, bodySize), { justify: true }));
       blocks.push(Block.spacer(5));
     }
   }
